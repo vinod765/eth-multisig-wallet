@@ -31,33 +31,37 @@ contract MultiSigWallet {
     uint256 private _status;
 
     //Modifiers
-    modifier onlyOwner() {
+    modifier onlyOwner() { _onlyOwner(); _; }
+    modifier txExists(uint _txId) { _txExists(_txId); _; }
+    modifier notExecuted(uint _txId) { _notExecuted(_txId); _; }
+    modifier notApproved(uint _txId) { _notApproved(_txId); _; }
+    modifier nonReentrant() { _nonReentrantBefore(); _; _nonReentrantAfter(); }
+
+    function _onlyOwner() internal view {
         require(isOwner[msg.sender], "not owner");
-        _;
     }
 
-    modifier txExists(uint _txId) {
+    function _txExists(uint _txId) internal view {
         require(_txId < transactions.length, "tx does not exist");
-        _;
     }
 
-    modifier notExecuted(uint _txId) {
+    function _notExecuted(uint _txId) internal view {
         require(!transactions[_txId].executed, "tx already executed");
-        _;
     }
 
-    modifier notApproved(uint _txId) {
+    function _notApproved(uint _txId) internal view {
         require(!approved[_txId][msg.sender], "tx already approved");
-        _;
     }
 
-    modifier nonReentrant() {
+    function _nonReentrantBefore() internal {
         require(_status != _ENTERED, "reentrant call");
         _status = _ENTERED;
-        _;
-        _status = _NOT_ENTERED;
     }
 
+    function _nonReentrantAfter() internal {
+        _status = _NOT_ENTERED;
+    }
+    
     //Constuctor
     constructor(address[] memory _owners, uint _required) {
         _status = _NOT_ENTERED;
