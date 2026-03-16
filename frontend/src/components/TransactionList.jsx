@@ -1,7 +1,7 @@
 import React from "react";
 import TransactionCard from "./TransactionCard";
 
-function TransactionList({ transactions, account, isOwner, required, loading, onApprove, onRevoke, onExecute }) {
+function TransactionList({ transactions, account, isOwner, required, loading, onApprove, onRevoke, onExecute, onCancel }) {
   return (
     <div>
       <h2 className="text-lg font-semibold text-slate-900 mb-4">Transactions</h2>
@@ -22,6 +22,7 @@ function TransactionList({ transactions, account, isOwner, required, loading, on
               onApprove={onApprove}
               onRevoke={onRevoke}
               onExecute={onExecute}
+              onCancel={onCancel}
             />
           ))}
         </div>

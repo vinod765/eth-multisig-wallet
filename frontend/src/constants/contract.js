@@ -30,6 +30,13 @@ export const ABI = [
   },
   {
     type: "function",
+    name: "cancelTransaction",
+    inputs: [{ name: "_txId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "executeTransaction",
     inputs: [{ name: "_txId", type: "uint256" }],
     outputs: [],
@@ -46,7 +53,9 @@ export const ABI = [
       { name: "value",         type: "uint256" },
       { name: "data",          type: "bytes"   },
       { name: "executed",      type: "bool"    },
+      { name: "cancelled",     type: "bool"    },
       { name: "approvalCount", type: "uint256" },
+      { name: "createdAt",     type: "uint256" },
     ],
     stateMutability: "view",
   },
@@ -85,6 +94,13 @@ export const ABI = [
     outputs: [{ name: "", type: "address" }],
     stateMutability: "view",
   },
+  {
+    type: "function",
+    name: "TX_EXPIRY",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
 
   //events
   {
@@ -116,6 +132,13 @@ export const ABI = [
   {
     type: "event",
     name: "Executed",
+    inputs: [
+      { name: "txId", type: "uint256", indexed: true },
+    ],
+  },
+  {
+    type: "event",
+    name: "Cancelled",
     inputs: [
       { name: "txId", type: "uint256", indexed: true },
     ],
