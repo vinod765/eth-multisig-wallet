@@ -16,18 +16,17 @@ contract MultiSigWalletTest is Test {
     address[] public owners;
     uint public constant REQUIRED = 2;
 
-    // Event declarations for expectEmit
     event Submitted(address indexed owner, uint indexed txId, address indexed to, uint value);
     event Approved(address indexed owner, uint indexed txId);
     event Revoked(address indexed owner, uint indexed txId);
     event Executed(uint indexed txId);
+    event Cancelled(uint indexed txId);
     event Deposited(address indexed sender, uint value, uint balance);
 
     function setUp() public {
         owners.push(owner1);
         owners.push(owner2);
         owners.push(owner3);
-
         wallet = new MultiSigWallet(owners, REQUIRED);
     }
 
@@ -85,10 +84,11 @@ contract MultiSigWalletTest is Test {
         uint txId = wallet.submitTransaction(recipient, 1 ether, "");
         assertEq(txId, 0);
 
-        (address to, uint value,, bool executed, uint approvalCount) = wallet.getTransaction(0);
+        (address to, uint value,, bool executed, bool cancelled, uint approvalCount,) = wallet.getTransaction(0);
         assertEq(to, recipient);
         assertEq(value, 1 ether);
         assertEq(executed, false);
+        assertEq(cancelled, false);
         assertEq(approvalCount, 0);
     }
 
@@ -116,7 +116,7 @@ contract MultiSigWalletTest is Test {
         vm.prank(owner1);
         wallet.approveTransaction(0);
 
-        (,,,, uint approvalCount) = wallet.getTransaction(0);
+        (,,,,,uint approvalCount,) = wallet.getTransaction(0);
         assertEq(approvalCount, 1);
     }
 
@@ -152,24 +152,23 @@ contract MultiSigWalletTest is Test {
 
     //15
     function test_CannotApproveExecutedTx() public {
-       vm.deal(address(wallet), 2 ether);
+        vm.deal(address(wallet), 2 ether);
 
-       vm.prank(owner1);
-       wallet.submitTransaction(recipient, 1 ether, ""); 
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
 
-       vm.prank(owner1);
-       wallet.approveTransaction(0);
+        vm.prank(owner1);
+        wallet.approveTransaction(0);
 
-       vm.prank(owner2);
-       wallet.approveTransaction(0);
+        vm.prank(owner2);
+        wallet.approveTransaction(0);
 
-       vm.prank(owner2);
-       wallet.executeTransaction(0);
+        vm.prank(owner2);
+        wallet.executeTransaction(0);
 
-       vm.prank(owner1);
-       vm.expectRevert("tx already executed");
-       wallet.approveTransaction(0);
-
+        vm.prank(owner1);
+        vm.expectRevert("tx already executed");
+        wallet.approveTransaction(0);
     }
 
     //16
@@ -178,12 +177,11 @@ contract MultiSigWalletTest is Test {
         wallet.submitTransaction(recipient, 1 ether, "");
 
         vm.prank(owner1);
-
         vm.expectEmit(true, true, false, false);
         emit Approved(owner1, 0);
-
         wallet.approveTransaction(0);
     }
+
     // revokeApproval tests
     //17
     function test_OwnerCanRevokeApproval() public {
@@ -196,7 +194,7 @@ contract MultiSigWalletTest is Test {
         vm.prank(owner1);
         wallet.revokeApproval(0);
 
-        (,,,, uint approvalCount) = wallet.getTransaction(0);
+        (,,,,,uint approvalCount,) = wallet.getTransaction(0);
         assertEq(approvalCount, 0);
     }
 
@@ -213,6 +211,7 @@ contract MultiSigWalletTest is Test {
     //19
     function test_CannotRevokeExecutedTx() public {
         vm.deal(address(wallet), 2 ether);
+
         vm.prank(owner1);
         wallet.submitTransaction(recipient, 1 ether, "");
 
@@ -261,7 +260,7 @@ contract MultiSigWalletTest is Test {
         vm.prank(owner1);
         wallet.executeTransaction(0);
 
-        (,,, bool executed,) = wallet.getTransaction(0);
+        (,,, bool executed,,, ) = wallet.getTransaction(0);
         assertTrue(executed);
         assertEq(recipient.balance, 1 ether);
     }
@@ -357,7 +356,6 @@ contract MultiSigWalletTest is Test {
         vm.prank(owner1);
         vm.expectEmit(true, false, false, false);
         emit Executed(0);
-
         wallet.executeTransaction(0);
     }
 
@@ -403,14 +401,10 @@ contract MultiSigWalletTest is Test {
         vm.prank(owner1);
         wallet.executeTransaction(0);
 
-        uint recipientBalanceAfter = recipient.balance;
-        uint walletBalanceAfter = address(wallet).balance;
-
-        assertEq(recipientBalanceAfter, recipientBalanceBefore + 1 ether);
-        assertEq(walletBalanceAfter, walletBalanceBefore - 1 ether);
+        assertEq(recipient.balance, recipientBalanceBefore + 1 ether);
+        assertEq(address(wallet).balance, walletBalanceBefore - 1 ether);
     }
 
-    //getApprovals view test
     //30
     function test_GetApprovalsReturnsCorrectOwners() public {
         vm.prank(owner1);
@@ -423,9 +417,174 @@ contract MultiSigWalletTest is Test {
         wallet.approveTransaction(0);
 
         address[] memory approvers = wallet.getApprovals(0);
-
         assertEq(approvers.length, 2);
         assertEq(approvers[0], owner1);
         assertEq(approvers[1], owner2);
+    }
+
+    // cancelTransaction tests
+    //31
+    function test_OwnerCanCancelTransaction() public {
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.prank(owner1);
+        wallet.cancelTransaction(0);
+
+        (,,, bool executed, bool cancelled,,) = wallet.getTransaction(0);
+        assertEq(executed, false);
+        assertEq(cancelled, true);
+    }
+
+    //32
+    function test_NonOwnerCannotCancel() public {
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.prank(nonOwner);
+        vm.expectRevert("not owner");
+        wallet.cancelTransaction(0);
+    }
+
+    //33
+    function test_CannotCancelExecutedTx() public {
+        vm.deal(address(wallet), 2 ether);
+
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.prank(owner1);
+        wallet.approveTransaction(0);
+
+        vm.prank(owner2);
+        wallet.approveTransaction(0);
+
+        vm.prank(owner1);
+        wallet.executeTransaction(0);
+
+        vm.prank(owner1);
+        vm.expectRevert("tx already executed");
+        wallet.cancelTransaction(0);
+    }
+
+    //34
+    function test_CannotCancelAlreadyCancelledTx() public {
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.prank(owner1);
+        wallet.cancelTransaction(0);
+
+        vm.prank(owner1);
+        vm.expectRevert("tx cancelled");
+        wallet.cancelTransaction(0);
+    }
+
+    //35
+    function test_CannotApproveAfterCancel() public {
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.prank(owner1);
+        wallet.cancelTransaction(0);
+
+        vm.prank(owner2);
+        vm.expectRevert("tx cancelled");
+        wallet.approveTransaction(0);
+    }
+
+    //36
+    function test_CannotExecuteAfterCancel() public {
+        vm.deal(address(wallet), 2 ether);
+
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.prank(owner1);
+        wallet.approveTransaction(0);
+
+        vm.prank(owner2);
+        wallet.approveTransaction(0);
+
+        vm.prank(owner1);
+        wallet.cancelTransaction(0);
+
+        vm.prank(owner1);
+        vm.expectRevert("tx cancelled");
+        wallet.executeTransaction(0);
+    }
+
+    //37
+    function test_CannotRevokeAfterCancel() public {
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.prank(owner1);
+        wallet.approveTransaction(0);
+
+        vm.prank(owner1);
+        wallet.cancelTransaction(0);
+
+        vm.prank(owner1);
+        vm.expectRevert("tx cancelled");
+        wallet.revokeApproval(0);
+    }
+
+    //38
+    function test_CancelEmitsEvent() public {
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.prank(owner1);
+        vm.expectEmit(true, false, false, false, address(wallet));
+        emit Cancelled(0);
+        wallet.cancelTransaction(0);
+    }
+
+    // expiry tests
+    //39
+    function test_CannotApproveExpiredTx() public {
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.warp(block.timestamp + 8 days);
+
+        vm.prank(owner2);
+        vm.expectRevert("tx expired");
+        wallet.approveTransaction(0);
+    }
+
+    //40
+    function test_CannotExecuteExpiredTx() public {
+        vm.deal(address(wallet), 2 ether);
+
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.prank(owner1);
+        wallet.approveTransaction(0);
+
+        vm.prank(owner2);
+        wallet.approveTransaction(0);
+
+        vm.warp(block.timestamp + 8 days);
+
+        vm.prank(owner1);
+        vm.expectRevert("tx expired");
+        wallet.executeTransaction(0);
+    }
+
+    //41
+    function test_CanApproveBeforeExpiry() public {
+        vm.prank(owner1);
+        wallet.submitTransaction(recipient, 1 ether, "");
+
+        vm.warp(block.timestamp + 6 days);
+
+        vm.prank(owner2);
+        wallet.approveTransaction(0);
+
+        (,,,,,uint approvalCount,) = wallet.getTransaction(0);
+        assertEq(approvalCount, 1);
     }
 }
